@@ -1,0 +1,33 @@
+[package]
+name = "aster-client"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Typed Rust client for the Aster DEX V3 API: futures, spot, EIP-712 signing, WebSocket streams and builder/agent flows"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/aster-client"
+keywords = ["aster", "dex", "trading", "futures", "ethereum"]
+categories = ["api-bindings", "cryptography::cryptocurrencies", "web-programming::http-client"]
+exclude = ["/target"]
+
+[lib]
+name = "aster_client"
+path = "src/lib.rs"
+
+[dependencies]
+alloy-primitives = { version = "1", default-features = false, features = ["std", "serde"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+hex = "0.4"
+k256 = { version = "0.13", default-features = false, features = ["ecdsa", "std"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "charset", "http2", "gzip"] }
+rust_decimal = { version = "1", features = ["serde-with-str"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha3 = "0.10"
+thiserror = "2"
+tokio = { version = "1", default-features = false, features = ["rt", "sync", "time", "net", "macros"] }
+tokio-tungstenite = { version = "0.26", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-util"] }
