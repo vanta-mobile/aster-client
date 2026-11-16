@@ -7,7 +7,7 @@
 
 use alloy_primitives::Address;
 
-use crate::auth::{self, AsterChain, Domain, Signature, Signer, now_micros};
+use crate::auth::{self, AsterChain, Domain, Signature, Signer, now_micros, SIGNATURE_CHAIN_ID_EVM};
 use crate::client::{Endpoint, Method, Venue};
 use crate::error::{Error, Result};
 use crate::model::*;
@@ -203,7 +203,7 @@ impl ApproveBuilder {
         let user = signer.address().to_string();
         let data =
             auth::approve_builder(&builder, &max_fee_rate, &builder_name, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(56), &data)?;
+        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             max_fee_rate,
@@ -222,6 +222,9 @@ impl ApproveBuilder {
         p.set("asterChain", &self.chain.as_str());
         p.set("user", &self.user);
         p.set("nonce", &self.nonce);
+        // Sent as a request parameter but NOT part of the signed struct; must
+        // equal the signing domain's chain id (56 EVM, 101 Solana).
+        p.set("signatureChainId", &SIGNATURE_CHAIN_ID_EVM);
         p.set_str("signature", self.signature.to_hex());
     }
 }
@@ -269,7 +272,7 @@ impl UpdateBuilder {
         let max_fee_rate = max_fee_rate.into();
         let user = signer.address().to_string();
         let data = auth::update_builder(&builder, &max_fee_rate, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(56), &data)?;
+        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             max_fee_rate,
@@ -294,6 +297,7 @@ impl Endpoint for UpdateBuilder {
         p.set("asterChain", &self.chain.as_str());
         p.set("user", &self.user);
         p.set("nonce", &self.nonce);
+        p.set("signatureChainId", &SIGNATURE_CHAIN_ID_EVM);
         p.set_str("signature", self.signature.to_hex());
         Ok(p)
     }
@@ -325,7 +329,7 @@ impl DelBuilder {
         let builder = builder.into();
         let user = signer.address().to_string();
         let data = auth::del_builder(&builder, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(56), &data)?;
+        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             chain,
@@ -348,6 +352,7 @@ impl Endpoint for DelBuilder {
         p.set("asterChain", &self.chain.as_str());
         p.set("user", &self.user);
         p.set("nonce", &self.nonce);
+        p.set("signatureChainId", &SIGNATURE_CHAIN_ID_EVM);
         p.set_str("signature", self.signature.to_hex());
         Ok(p)
     }

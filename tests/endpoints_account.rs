@@ -497,15 +497,18 @@ fn agent_and_builder_admin_endpoints() {
     .unwrap();
     meta(&approve, POST, "/fapi/v3/approveBuilder", FUT, NONE);
     assert_eq!(approve.params().unwrap().get("maxFeeRate"), Some("0.0001"));
+    assert_eq!(approve.params().unwrap().get("signatureChainId"), Some("56"));
 
     let update =
         UpdateBuilder::sign(&signer(), "0xbuilder", "0.0002", AsterChain::Mainnet, 8).unwrap();
     meta(&update, POST, "/fapi/v3/updateBuilder", FUT, NONE);
     assert_eq!(update.params().unwrap().get("builder"), Some("0xbuilder"));
+    assert_eq!(update.params().unwrap().get("signatureChainId"), Some("56"));
 
     let del = DelBuilder::sign(&signer(), "0xbuilder", AsterChain::Mainnet, 9).unwrap();
     meta(&del, DELETE, "/fapi/v3/builder", FUT, NONE);
     assert_eq!(del.params().unwrap().get("nonce"), Some("9"));
+    assert_eq!(del.params().unwrap().get("signatureChainId"), Some("56"));
 }
 
 #[test]
