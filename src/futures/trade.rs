@@ -894,7 +894,9 @@ impl Endpoint for ChaseOrder {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StrategySubOrderRequest {
-    /// Leg sequence number, starting at 1.
+    /// Leg sequence number, starting at 1. Sent as a JSON **string** (the
+    /// docs type it STRING; a number is rejected with `-1102`, 2026-11-19 mainnet).
+    #[serde(serialize_with = "as_string")]
     pub strategy_sub_id: u32,
     /// Security type of the strategy leg.
     pub security_type: SecurityType,
@@ -927,13 +929,22 @@ pub struct StrategySubOrderRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_type: Option<WorkingType>,
     /// Whether the order may only reduce a position.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "opt_bool_as_string"
+    )]
     pub reduce_only: Option<bool>,
     /// Whether this is a close-all order.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "opt_bool_as_string"
+    )]
     pub close_position: Option<bool>,
     /// Whether the conditional trigger is price-protected.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "opt_bool_as_string"
+    )]
     pub price_protect: Option<bool>,
     /// Client order id; the idempotency key for orders.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -962,6 +973,25 @@ pub struct StrategySubOrderRequest {
     /// Second trigger action.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub second_trigger: Option<String>,
+}
+
+/// Serialize a number as its decimal string (`1` → `"1"`).
+fn as_string<S: serde::Serializer>(
+    value: &u32,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    serializer.serialize_str(&value.to_string())
+}
+
+/// Serialize `Some(bool)` as `"true"` / `"false"` (the strategy legs are typed STRING).
+fn opt_bool_as_string<S: serde::Serializer>(
+    value: &Option<bool>,
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error> {
+    match value {
+        Some(flag) => serializer.serialize_str(if *flag { "true" } else { "false" }),
+        None => serializer.serialize_none(),
+    }
 }
 
 /// `POST /fapi/v3/placeStrategyOrder` (OTO / OCO / OTOCO).

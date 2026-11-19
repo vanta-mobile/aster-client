@@ -55,7 +55,7 @@ wire_enum!(
 wire_enum!(
     /// Time in force. `FOK` is rejected by both spot and futures order
     /// placement (`-1115 INVALID_TIF`) and is not modelled.
-    TimeInForce { Gtc => "GTC", Ioc => "IOC", Gtx => "GTX", Hidden => "HIDDEN" }
+    TimeInForce { Gtc => "GTC", Ioc => "IOC", Gtx => "GTX", Hidden => "HIDDEN", Day => "DAY" }
 );
 
 wire_enum!(

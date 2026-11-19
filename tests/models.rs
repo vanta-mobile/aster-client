@@ -620,3 +620,11 @@ fn websocket_events() {
     assert_eq!(wrapped.stream, "btcusdt@aggTrade");
     assert!(matches!(wrapped.data, Event::AggTrade(_)));
 }
+
+/// 组合单的市价腿在 `strategyOpenOrder` 里回 `timeInForce: "DAY"`（文档的枚举里没有，2026-11-19 主网实测），
+/// 解析不能失败。
+#[test]
+fn time_in_force_accepts_undocumented_day() {
+    let tif: aster_client::model::TimeInForce = serde_json::from_str("\"DAY\"").unwrap();
+    assert_eq!(tif.as_str(), "DAY");
+}

@@ -853,6 +853,9 @@ fn futures_cancel_batch_chase_and_strategy_endpoints() {
         serde_json::from_str(encoded.get("subOrderList").unwrap()).unwrap();
     assert_eq!(legs.len(), 2);
     assert_eq!(legs[0]["securityType"], "USDT_FUTURES");
+    // 文档把 strategySubId / reduceOnly 等标为 STRING；发数字主网回 -1102（2026-11-19 实测）。
+    assert_eq!(legs[0]["strategySubId"], "1");
+    assert!(legs.iter().all(|leg| leg["strategySubId"].is_string()));
 
     let update = UpdateStrategyOrder {
         strategy_id: 7,

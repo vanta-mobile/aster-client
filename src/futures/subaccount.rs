@@ -80,6 +80,81 @@ impl Endpoint for CreateSubAccount {
     }
 }
 
+/// Sub-account status for [`UpdateSubAccount`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubAccountStatus {
+    /// Active.
+    Normal,
+    /// Frozen: no new positions, no transfers in or out.
+    Frozen,
+}
+
+impl SubAccountStatus {
+    /// Wire value.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Normal => "NORMAL",
+            Self::Frozen => "FROZEN",
+        }
+    }
+}
+
+/// `POST /fapi/v3/updateSubAccount` — owner-signed rename / freeze / unfreeze.
+///
+/// Body = `subSourceAddr, nonce, user, signer` then the optional fields that
+/// are actually sent (`subAccountName`, `status`), signed in the trading
+/// domain. Same field order as the App (`subaccount_management_repository.dart`).
+#[derive(Debug, Clone)]
+pub struct UpdateSubAccount {
+    params: Params,
+}
+
+impl UpdateSubAccount {
+    /// Build and sign with the owner key. `signer` is sent as `signer` (the App
+    /// sends the owner address itself); at least one of `name` / `status`.
+    pub fn sign(
+        owner: &dyn Signer,
+        child: Address,
+        signer: Address,
+        name: Option<&str>,
+        status: Option<SubAccountStatus>,
+        chain_id: u64,
+    ) -> Result<Self> {
+        if name.is_none() && status.is_none() {
+            return Err(crate::error::Error::InvalidParam("subAccountName/status"));
+        }
+        let mut p = Params::in_order();
+        p.set_str("subSourceAddr", child.to_string());
+        p.set("nonce", &now_micros());
+        p.set_str("user", owner.address().to_string());
+        p.set_str("signer", signer.to_string());
+        if let Some(name) = name {
+            p.set_str("subAccountName", name.to_owned());
+        }
+        if let Some(status) = status {
+            p.set_str("status", status.as_str());
+        }
+        let signature = auth::sign_message(owner, &Domain::aster_sign(chain_id), &p.encode())?;
+        p.set_str("signature", signature.to_hex());
+        Ok(Self { params: p })
+    }
+}
+
+impl Endpoint for UpdateSubAccount {
+    type Response = Ack;
+    const METHOD: Method = Method::Post;
+    const PATH: &'static str = "/fapi/v3/updateSubAccount";
+    const VENUE: Venue = Venue::Futures;
+
+    fn params(&self) -> Result<Params> {
+        Ok(self.params.clone())
+    }
+
+    fn weight(&self) -> u32 {
+        5
+    }
+}
+
 /// `GET /fapi/v3/getSubAccountList` — signed by the owner's agent.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SubAccountList;
@@ -252,6 +327,34 @@ mod tests {
                 .unwrap()
                 .encode()
                 .contains("signatureChainId")
+        );
+    }
+
+    #[test]
+    fn update_body_is_the_signed_message_in_app_order() {
+        let owner = key(1);
+        let request = UpdateSubAccount::sign(
+            &owner,
+            key(2).address(),
+            owner.address(),
+            None,
+            Some(SubAccountStatus::Frozen),
+            1666,
+        )
+        .unwrap();
+        let body = request.params().unwrap().encode();
+        let (msg, sig) = split(&body, "signature");
+        let keys: Vec<&str> = msg
+            .split('&')
+            .map(|kv| kv.split_once('=').unwrap().0)
+            .collect();
+        assert_eq!(keys, ["subSourceAddr", "nonce", "user", "signer", "status"]);
+        assert!(msg.ends_with("&status=FROZEN"));
+        let expected = auth::sign_message(&owner, &Domain::aster_sign(1666), &msg).unwrap();
+        assert_eq!(sig, expected.to_hex());
+        assert!(
+            UpdateSubAccount::sign(&owner, key(2).address(), owner.address(), None, None, 1666)
+                .is_err()
         );
     }
 
