@@ -70,7 +70,7 @@ println!("{} {:?}", order.order_id, order.status);
 - 普通请求：`EIP-712(domain=AsterSignTransaction, chainId=1666/714, type=Message(string msg))`，`msg` 是最终 form-encoded 串（不含 `signature`）。
 - 提现：`domain=Aster, chainId=目标链`，`type=Action`（字段含空格，如 `destination Chain`）。
 - Builder 授权：`ApproveBuilder/UpdateBuilder/DelBuilder`，域 `chainId=56`。
-- `registerAndApproveAgent`：`Message(msg)`，域 `chainId=signatureChainId`（56/101）。
+- `registerAndApproveAgent`：`Message(msg)`，域 `chainId=signatureChainId`（56/101）。`msg` 按**文档字段顺序**（不按 ASCII 排序）、`ipWhitelist` 恒带（未设为空），且 `msg` 就是请求 body（末尾追加 `&signature=`）。排序后发送或省掉空 `ipWhitelist` 会报 `-1000 Signature check failed`（2026-11-19 主网实测；修复后同一钱包 `code=200`，`GET /fapi/v3/agent` 可查到）。未入金账户也能注册 agent，但随后的账户查询返回 `-5050`。
 - nonce：微秒、按 signer 严格递增（`MicrosecondNonce`，原子 CAS）；多实例需自行实现 `NonceSource` 共享递增源。
 - 冷启动与时钟偏差：`PersistentNonce<S: NonceStore>` 落盘高水位（默认每 1s 进度写一次，`flush()` 可强制），`Client::calibrate_time()` 拉 `/fapi/v3/time` 并把偏移注入 nonce（手机时钟偏差 >60s 时签名必失败）。
 - 限流：`RateLimiter::from_rate_limits(&exchange_info.rate_limits)` + `Client::rate_limiter(Arc<..>)`，`send` 前按端点权重等待。

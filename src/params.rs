@@ -77,14 +77,24 @@ macro_rules! int_params {
 int_params!(i8, i16, i32, i64, u8, u16, u32, u64, usize);
 
 /// Ordered request parameters. Duplicate keys are allowed (the exchange takes
-/// the last one); ordering is normalised to ASCII ascending by [`Params::encode`].
+/// the last one); ordering is normalised to ASCII ascending by [`Params::encode`],
+/// unless built with [`Params::in_order`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Params(Vec<(&'static str, String)>);
+pub struct Params(Vec<(&'static str, String)>, bool);
 
 impl Params {
     /// Create a new value.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Parameters that keep their insertion order when encoded.
+    ///
+    /// For endpoints whose signature covers a documented field order rather
+    /// than the ASCII-sorted canonical string (`registerAndApproveAgent`):
+    /// the encoded string is both the signed `msg` and the request body.
+    pub fn in_order() -> Self {
+        Self(Vec::new(), true)
     }
 
     /// Set a typed parameter. `None` values are dropped.
@@ -116,13 +126,15 @@ impl Params {
             .map(|(_, v)| v.as_str())
     }
 
-    /// Canonical `(key, value)` pairs, ASCII-sorted like [`Params::encode`].
+    /// Canonical `(key, value)` pairs, in the same order as [`Params::encode`].
     ///
     /// Useful for debugging and for tests that want to assert the wire
     /// parameters without dealing with percent-encoding.
     pub fn pairs(&self) -> Vec<(&'static str, String)> {
         let mut entries: Vec<_> = self.0.clone();
-        entries.sort_by(|a, b| a.0.cmp(b.0));
+        if !self.1 {
+            entries.sort_by(|a, b| a.0.cmp(b.0));
+        }
         entries
     }
 
@@ -131,13 +143,16 @@ impl Params {
         self.0
     }
 
-    /// Canonical string: keys sorted by ASCII, percent-encoded
-    /// (`A-Za-z0-9-._~` literal, space as `+`, everything else `%XX` uppercase).
+    /// Canonical string: keys sorted by ASCII (insertion order for
+    /// [`Params::in_order`]), percent-encoded (`A-Za-z0-9-._~` literal, space
+    /// as `+`, everything else `%XX` uppercase).
     ///
     /// This is exactly the string that must be signed.
     pub fn encode(&self) -> String {
         let mut entries: Vec<&(&'static str, String)> = self.0.iter().collect();
-        entries.sort_by(|a, b| a.0.cmp(b.0));
+        if !self.1 {
+            entries.sort_by(|a, b| a.0.cmp(b.0));
+        }
         let mut out = String::with_capacity(64 * entries.len());
         for (key, value) in entries {
             if !out.is_empty() {

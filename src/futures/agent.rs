@@ -7,7 +7,9 @@
 
 use alloy_primitives::Address;
 
-use crate::auth::{self, AsterChain, Domain, Signature, Signer, now_micros, SIGNATURE_CHAIN_ID_EVM};
+use crate::auth::{
+    self, AsterChain, Domain, SIGNATURE_CHAIN_ID_EVM, Signature, Signer, now_micros,
+};
 use crate::client::{Endpoint, Method, Venue};
 use crate::error::{Error, Result};
 use crate::model::*;
@@ -89,27 +91,28 @@ impl RegisterAndApproveAgent {
         {
             return Err(Error::InvalidParam("ipWhitelist"));
         }
+        let user = request.user.to_string();
+        let agent_address = request.agent_address.to_string();
         let nonce = now_micros();
-        let ip_whitelist = request.ip_whitelist.clone().unwrap_or_default();
-        let msg = format!(
-            "user={}&nonce={}&agentName={}&agentAddress={}&expired={}&signatureChainId={}&canSpotTrade={}&canPerpTrade={}&canWithdraw={}&ipWhitelist={}",
-            request.user,
+        let wire = RegistrationWire {
+            user: &user,
             nonce,
-            request.agent_name,
-            request.agent_address,
-            request.expired,
-            request.signature_chain_id,
-            request.can_spot_trade,
-            request.can_perp_trade,
-            request.can_withdraw,
-            ip_whitelist,
-        );
+            agent_name: &request.agent_name,
+            agent_address: &agent_address,
+            expired: request.expired,
+            signature_chain_id: request.signature_chain_id,
+            can_spot_trade: request.can_spot_trade,
+            can_perp_trade: request.can_perp_trade,
+            can_withdraw: request.can_withdraw,
+            ip_whitelist: request.ip_whitelist.as_deref(),
+            agent_code: request.agent_code.as_deref(),
+        };
         let domain = Domain::aster_sign(request.signature_chain_id);
-        let signature = auth::sign_message(signer, &domain, &msg)?;
+        let signature = auth::sign_message(signer, &domain, &wire.params().encode())?;
         Ok(Self {
-            user: request.user.to_string(),
+            user,
             agent_name: request.agent_name.clone(),
-            agent_address: request.agent_address.to_string(),
+            agent_address,
             expired: request.expired,
             signature_chain_id: request.signature_chain_id,
             can_spot_trade: request.can_spot_trade,
@@ -121,6 +124,65 @@ impl RegisterAndApproveAgent {
             signature,
         })
     }
+
+    fn wire(&self) -> RegistrationWire<'_> {
+        RegistrationWire {
+            user: &self.user,
+            nonce: self.nonce,
+            agent_name: &self.agent_name,
+            agent_address: &self.agent_address,
+            expired: self.expired,
+            signature_chain_id: self.signature_chain_id,
+            can_spot_trade: self.can_spot_trade,
+            can_perp_trade: self.can_perp_trade,
+            can_withdraw: self.can_withdraw,
+            ip_whitelist: self.ip_whitelist.as_deref(),
+            agent_code: self.agent_code.as_deref(),
+        }
+    }
+}
+
+/// The registration fields in wire order.
+///
+/// The signed `msg` **is** the request body (minus `&signature=`), so both are
+/// produced from this one ordered parameter list: documented field order (not
+/// ASCII-sorted), percent-encoded, `ipWhitelist` always present (empty when
+/// unset). This matches the App's working implementation; a body that was
+/// re-sorted or dropped the empty `ipWhitelist` failed live with `-1000
+/// Signature check failed` (2026-11-19). `agentCode` is not in the documented
+/// `msg`; when set it is appended to both, which is unverified live.
+struct RegistrationWire<'a> {
+    user: &'a str,
+    nonce: u64,
+    agent_name: &'a str,
+    agent_address: &'a str,
+    expired: i64,
+    signature_chain_id: u64,
+    can_spot_trade: bool,
+    can_perp_trade: bool,
+    can_withdraw: bool,
+    ip_whitelist: Option<&'a str>,
+    agent_code: Option<&'a str>,
+}
+
+impl RegistrationWire<'_> {
+    fn params(&self) -> Params {
+        let mut p = Params::in_order();
+        p.set("user", self.user);
+        p.set("nonce", &self.nonce);
+        p.set("agentName", self.agent_name);
+        p.set("agentAddress", self.agent_address);
+        p.set("expired", &self.expired);
+        p.set("signatureChainId", &self.signature_chain_id);
+        p.set("canSpotTrade", &self.can_spot_trade);
+        p.set("canPerpTrade", &self.can_perp_trade);
+        p.set("canWithdraw", &self.can_withdraw);
+        p.set("ipWhitelist", self.ip_whitelist.unwrap_or_default());
+        if let Some(code) = self.agent_code {
+            p.set("agentCode", code);
+        }
+        p
+    }
 }
 
 impl Endpoint for RegisterAndApproveAgent {
@@ -130,18 +192,8 @@ impl Endpoint for RegisterAndApproveAgent {
     const VENUE: Venue = Venue::Futures;
 
     fn params(&self) -> Result<Params> {
-        let mut p = Params::new();
-        p.set("user", &self.user);
-        p.set("nonce", &self.nonce);
-        p.set("agentName", &self.agent_name);
-        p.set("agentAddress", &self.agent_address);
-        p.set("expired", &self.expired);
-        p.set("signatureChainId", &self.signature_chain_id);
-        p.set("canSpotTrade", &self.can_spot_trade);
-        p.set("canPerpTrade", &self.can_perp_trade);
-        p.set("canWithdraw", &self.can_withdraw);
-        p.set("ipWhitelist", &self.ip_whitelist);
-        p.set("agentCode", &self.agent_code);
+        let mut p = self.wire().params();
+        // Last, after the signed prefix: the body is `msg&signature=0x…`.
         p.set_str("signature", self.signature.to_hex());
         Ok(p)
     }
@@ -203,7 +255,8 @@ impl ApproveBuilder {
         let user = signer.address().to_string();
         let data =
             auth::approve_builder(&builder, &max_fee_rate, &builder_name, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
+        let signature =
+            auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             max_fee_rate,
@@ -272,7 +325,8 @@ impl UpdateBuilder {
         let max_fee_rate = max_fee_rate.into();
         let user = signer.address().to_string();
         let data = auth::update_builder(&builder, &max_fee_rate, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
+        let signature =
+            auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             max_fee_rate,
@@ -329,7 +383,8 @@ impl DelBuilder {
         let builder = builder.into();
         let user = signer.address().to_string();
         let data = auth::del_builder(&builder, chain, &user, nonce);
-        let signature = auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
+        let signature =
+            auth::sign_struct(signer, &Domain::aster_sign(SIGNATURE_CHAIN_ID_EVM), &data)?;
         Ok(Self {
             builder,
             chain,

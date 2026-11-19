@@ -497,7 +497,10 @@ fn agent_and_builder_admin_endpoints() {
     .unwrap();
     meta(&approve, POST, "/fapi/v3/approveBuilder", FUT, NONE);
     assert_eq!(approve.params().unwrap().get("maxFeeRate"), Some("0.0001"));
-    assert_eq!(approve.params().unwrap().get("signatureChainId"), Some("56"));
+    assert_eq!(
+        approve.params().unwrap().get("signatureChainId"),
+        Some("56")
+    );
 
     let update =
         UpdateBuilder::sign(&signer(), "0xbuilder", "0.0002", AsterChain::Mainnet, 8).unwrap();
@@ -509,6 +512,61 @@ fn agent_and_builder_admin_endpoints() {
     meta(&del, DELETE, "/fapi/v3/builder", FUT, NONE);
     assert_eq!(del.params().unwrap().get("nonce"), Some("9"));
     assert_eq!(del.params().unwrap().get("signatureChainId"), Some("56"));
+}
+
+/// The signed `msg` must be byte-identical to the body before `&signature=`:
+/// documented field order (not ASCII-sorted) and `ipWhitelist` always present.
+/// A sorted body without the empty `ipWhitelist` failed live with `-1000`.
+#[test]
+fn register_agent_body_is_the_signed_message() {
+    use aster_client::auth::{Domain, sign_message};
+    use aster_client::futures::*;
+
+    let request = RegisterAgentRequest {
+        user: "0x14791697260E4c9A71f18484C9f997B308e59325"
+            .parse()
+            .unwrap(),
+        agent_name: "vanta e2e".into(),
+        agent_address: "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap(),
+        expired: 1_900_000_000_000,
+        can_spot_trade: false,
+        can_perp_trade: true,
+        can_withdraw: false,
+        ip_whitelist: None,
+        agent_code: None,
+        signature_chain_id: 56,
+    };
+    let registration = RegisterAndApproveAgent::sign(&signer(), &request).unwrap();
+    let body = registration.params().unwrap().encode();
+    let (msg, signature) = body.rsplit_once("&signature=").unwrap();
+
+    let keys: Vec<&str> = msg
+        .split('&')
+        .map(|pair| pair.split_once('=').unwrap().0)
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            "user",
+            "nonce",
+            "agentName",
+            "agentAddress",
+            "expired",
+            "signatureChainId",
+            "canSpotTrade",
+            "canPerpTrade",
+            "canWithdraw",
+            "ipWhitelist",
+        ]
+    );
+    assert!(msg.starts_with("user=0x14791697260E4c9A71f18484C9f997B308e59325&nonce="));
+    assert!(msg.contains("&agentName=vanta+e2e&"), "{msg}");
+    assert!(msg.ends_with("&canWithdraw=false&ipWhitelist="), "{msg}");
+
+    let expected = sign_message(&signer(), &Domain::aster_sign(56), msg).unwrap();
+    assert_eq!(signature, expected.to_hex());
 }
 
 #[test]
