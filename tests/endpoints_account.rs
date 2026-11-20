@@ -230,13 +230,14 @@ fn futures_account_endpoints() {
         .params()
         .is_err()
     );
+    // 档位上限由交易所校验：BTCUSDT 第一档就是 200x。
     assert!(
         ChangeLeverage {
             symbol: "BTCUSDT".into(),
-            leverage: 126
+            leverage: 200
         }
         .params()
-        .is_err()
+        .is_ok()
     );
     check(
         ChangeMarginType {

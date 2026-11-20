@@ -404,7 +404,8 @@ impl Endpoint for ChangeLeverage {
     const SECURITY: Security = Security::Signer;
 
     fn params(&self) -> Result<Params> {
-        if self.leverage == 0 || self.leverage > 125 {
+        // 上限因交易对 / 名义档而异（BTCUSDT 第一档 200x，2026-11-20 实测），交给交易所校验。
+        if self.leverage == 0 {
             return Err(Error::InvalidParam("leverage"));
         }
         let mut p = Params::new();

@@ -235,13 +235,16 @@ pub struct LeverageBracket {
     pub brackets: Vec<Bracket>,
 }
 
-/// One leverage bracket.
+/// One leverage bracket. Mainnet returns every field as a string
+/// (`"initialLeverage":"200"`), so integers accept either representation.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Bracket {
     /// Bracket number.
+    #[serde(deserialize_with = "super::u32_or_string")]
     pub bracket: u32,
     /// Maximum leverage for the bracket.
+    #[serde(deserialize_with = "super::u32_or_string")]
     pub initial_leverage: u32,
     /// Upper notional bound of the bracket.
     pub notional_cap: Decimal,

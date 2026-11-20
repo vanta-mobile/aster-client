@@ -365,6 +365,17 @@ fn account_models() {
         }]
     }]));
     assert_eq!(brackets.as_slice()[0].brackets[0].initial_leverage, 75);
+    // 主网实际返回：所有字段都是字符串（2026-11-20 实测）。
+    let mainnet: OneOrMany<LeverageBracket> = dec(json!({
+        "symbol": "BTCUSDT",
+        "brackets": [{
+            "bracket": "1", "cum": "0.0", "initialLeverage": "200", "maintMarginRatio": "0.0025",
+            "notionalCap": "400", "notionalFloor": "0"
+        }]
+    }));
+    let first = &mainnet.as_slice()[0].brackets[0];
+    assert_eq!((first.bracket, first.initial_leverage), (1, 200));
+    assert_eq!(first.notional_cap, Decimal::new(400, 0));
 
     let adl: AdlQuantile = dec(json!({
         "symbol": "BTCUSDT", "adlQuantile": {"LONG": 4, "SHORT": 2, "BOTH": 1}

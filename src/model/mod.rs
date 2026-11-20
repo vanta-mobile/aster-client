@@ -93,6 +93,25 @@ where
     }
 }
 
+/// `u32` from a JSON number or a numeric string.
+pub(crate) fn u32_or_string<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Value {
+        Number(u64),
+        Text(String),
+    }
+    match Value::deserialize(deserializer)? {
+        Value::Number(n) => u32::try_from(n).map_err(serde::de::Error::custom),
+        Value::Text(text) => text
+            .parse()
+            .map_err(|_| serde::de::Error::custom("not an unsigned integer")),
+    }
+}
+
 impl Ack {
     /// Whether the code is `200`.
     pub fn is_success(&self) -> bool {

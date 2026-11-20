@@ -387,7 +387,10 @@ fn spot_builder_endpoints() {
         Security::None,
     );
     assert_eq!(approve.params().unwrap().get("maxFeeRate"), Some("0.01"));
-    assert_eq!(approve.params().unwrap().get("signatureChainId"), Some("56"));
+    assert_eq!(
+        approve.params().unwrap().get("signatureChainId"),
+        Some("56")
+    );
 
     let update = SpotUpdateBuilder(
         UpdateBuilder::sign(
